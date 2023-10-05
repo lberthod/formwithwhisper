@@ -17,11 +17,29 @@ import {
 
 import { CopyIcon, DeleteIcon } from '@chakra-ui/icons';
 import { useState, useRef, useEffect } from 'react';
+import { Button } from '@chakra-ui/react';
+import { PlayIcon, PauseIcon } from '@chakra-ui/icons';
 
 import Recorder from './Recorder';
 import PageCenter from './PageCenter';
 
 import audioBufferToWav from 'audiobuffer-to-wav';
+import { initializeApp } from 'firebase/app';
+import { getDatabase, ref, get } from 'firebase/database';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA_7JvtZd8mvZ4JIAYSGjEUF28PA3TBqc4",
+  authDomain: "tete-80d6d.firebaseapp.com",
+  databaseURL: "https://tete-80d6d.firebaseio.com",
+  projectId: "tete-80d6d",
+  storageBucket: "tete-80d6d.appspot.com",
+  messagingSenderId: "1030692630539",
+  appId: "1:1030692630539:web:6c4e7733e1885bf185570e"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const database = getDatabase(firebaseApp);
+
 
 const isSafari = () => {
   return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -33,20 +51,61 @@ const blobToAudioBuffer = async (blob) => {
   return await audioContext.decodeAudioData(arrayBuffer);
 };
 
+const getMp3LinkAndText = async (counter) => {
+  try {
+    const mp3Ref = ref(database, `mp3Links/${counter}`);  // Accédez à la bonne référence
+    const snapshot = await get(mp3Ref);
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      console.log(data);
+      return { link: data.link, text: data.text };  // Récupérez le lien et le texte
+    } else {
+      console.error('No data found for the specified counter value.');
+      return { link: null, text: null };
+    }
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    return { link: null, text: null };
+  }
+};
+
+
+const getMp3Link = async (counter) => {
+  try {
+    const mp3Ref = ref(database, `mp3Links/`);
+    const snapshot = await get(mp3Ref);
+    if (snapshot.exists()) {
+      console.log(snapshot.val()[counter]);
+      return snapshot.val()[1];
+    } else {
+      console.error('No mp3 link found for the specified counter value.');
+      return null;
+    }
+  } catch (error) {
+    console.error('Error fetching mp3 link:', error);
+    return null;
+  }
+};
+
+
+
 const RecordSpeech = () => {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingText, setProcessingText] = useState('');
   const [textResponse, setTextResponse] = useState('');
-  const [subText, setSubText] = useState('Translate audio into English text');
-
-  const [operation, setOperation] = useState('translate');
+  const [subText, setSubText] = useState('Soutien à lindpendance au logement');
+  const [counter, setCounter] = useState(1);
+  const audioRef = useRef(null);
+  const [operation, setOperation] = useState('transcribe');
+  const [mp3Text, setMp3Text] = useState(null);
 
   const maxRecordingTimeoutRef = useRef(null);
 
   const { onCopy } = useClipboard(textResponse);
   const toast = useToast();
+
 
   const copyText = () => {
     toast({
@@ -58,6 +117,32 @@ const RecordSpeech = () => {
     });
     onCopy();
   };
+
+  const [mp3Link, setMp3Link] = useState(null);
+
+
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const { link, text } = await getMp3LinkAndText(counter);
+      setMp3Link(link);
+      setMp3Text(text);  // Définissez le texte
+    };
+
+    fetchData();
+  }, [counter]);
+
+  const playAudio = () => {
+    const audio = new Audio(mp3Link);
+    audio.play();
+  };
+
+  useEffect(() => {
+    audioRef.current = new Audio(mp3Link);
+  }, [mp3Link]);
+
+
+
 
   useEffect(() => {
     if (processingText === 'Max. recording limit crossed') {
@@ -81,6 +166,8 @@ const RecordSpeech = () => {
 
   const startRecording = async () => {
     setIsRecording(true);
+    setCounter(prevCounter => prevCounter + 1);  // Incrémentation du compteur ici
+
     setProcessingText('');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -112,12 +199,17 @@ const RecordSpeech = () => {
       const wavBlob = new Blob([wavArrayBuffer], { type: 'audio/wav' });
 
       const formData = new FormData();
+
       formData.append('file', wavBlob, 'audio.wav');
+      console.log(counter);
 
       const response = await fetch(
-        operation === 'translate' ? '/api/translations' : '/api/transcriptions',
+        operation === 'translate' ? '/api/translations' : '/api/transcriptions?counter=${counter}',
         {
           method: 'POST',
+          headers: {
+            'x-counter': counter,
+          },
           body: formData,
         }
       );
@@ -147,6 +239,7 @@ const RecordSpeech = () => {
     }
 
     setIsRecording(false);
+
     setProcessingText('Processing...');
     mediaRecorderRef.current.stop();
 
@@ -163,8 +256,20 @@ const RecordSpeech = () => {
     mediaRecorderRef.current.addEventListener('dataavailable', onDataAvailable);
   };
 
+  const toggleAudio = () => {
+    if (audioRef.current) {
+      if (audioRef.current.paused) {
+        audioRef.current.play();
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  };
+
+
   return (
     <Box w={'100vw'}>
+
       <PageCenter>
         <Stack
           height='auto'
@@ -181,7 +286,7 @@ const RecordSpeech = () => {
               letterSpacing='tight'
               textAlign={'center'}
             >
-              Whisper : Speech to Text
+              Questionnaire basé par la voix
             </Heading>
             <Heading
               fontSize='md'
@@ -195,6 +300,22 @@ const RecordSpeech = () => {
             </Heading>
           </VStack>
           <Divider />
+          <Text>Question : {counter} / 22</Text>
+          {mp3Link && (
+            <Button
+              onClick={toggleAudio}
+              colorScheme="teal"
+              size="lg"
+              iconSpacing={4}
+              rightIcon={audioRef.current && !audioRef.current.paused ? <i className="fas fa-pause"></i> : <i className="fas fa-play"></i>}
+            >
+              Écouter
+            </Button>
+          )}
+          {mp3Text && (  // Si mp3Text est défini, affichez-le
+            <Text mt={4}>{mp3Text}</Text>
+          )}
+
           <Flex w='100%' pb={5}>
             <FormControl
               display={'flex'}
@@ -202,22 +323,13 @@ const RecordSpeech = () => {
               justify='center'
               alignItems='center'
             >
-              <Select
-                w='70%'
-                maxW='200px'
-                display='inline-block'
-                onChange={handleOperationChange}
-                defaultValue={operation}
-              >
-                <option value='translate'>Translate</option>
-                <option value='transcribe'>Transcribe</option>
-              </Select>
+
             </FormControl>
           </Flex>
           <SlideFade in={textResponse !== ''} offsetY='20px'>
             <Box
               w='80vw'
-              h='20vh'
+              h='10vh'
               bgColor={'gray.200'}
               p={4}
               borderRadius='lg'
@@ -250,35 +362,14 @@ const RecordSpeech = () => {
             {processingText}
           </Text>
           <VStack spacing={0}>
-            <Text fontWeight={'bold'} color='gray.600'>
-              Supported Laguagues:
-            </Text>
+           
             <Box
               w={{ base: '50%', lg: '90%' }}
               height={'15vh'}
               overflowY='auto'
             >
-              <Text align={'center'} fontSize='sm'>
-                Afrikaans, Arabic, Armenian, Azerbaijani, Belarusian, Bosnian,
-                Bulgarian, Catalan, Chinese, Croatian, Czech, Danish, Dutch,
-                English, Estonian, Finnish, French, Galician, German, Greek,
-                Hebrew, Hindi, Hungarian, Icelandic, Indonesian, Italian,
-                Japanese, Kannada, Kazakh, Korean, Latvian, Lithuanian,
-                Macedonian, Malay, Marathi, Maori, Nepali, Norwegian, Persian,
-                Polish, Portuguese, Romanian, Russian, Serbian, Slovak,
-                Slovenian, Spanish, Swahili, Swedish, Tagalog, Tamil, Thai,
-                Turkish, Ukrainian, Urdu, Vietnamese, and Welsh.
-              </Text>
-              <Text align={'center'} mt={2} fontWeight='bold'>
-                <Link
-                  href='https://help.openai.com/en/articles/7031512-whisper-api-faq'
-                  color='blue.400'
-                  _hover={{ color: 'blue.500' }}
-                  isExternal
-                >
-                  FAQ
-                </Link>
-              </Text>
+
+      
             </Box>
           </VStack>
           <VStack spacing={0}>
@@ -286,12 +377,12 @@ const RecordSpeech = () => {
               Developed by:{' '}
               <Text as='span'>
                 <Link
-                  href='https://www.linkedin.com/in/creativehims/'
+                  href='https://www.linkedin.com/in/hessovalaiswallis/'
                   color='blue.400'
                   _hover={{ color: 'blue.500' }}
                   isExternal
                 >
-                  Himanshu Gupta
+                  HES-SO Valais/Wallis
                 </Link>
               </Text>
             </Text>
@@ -299,7 +390,7 @@ const RecordSpeech = () => {
               GitHub{' '}
               <Text as='span'>
                 <Link
-                  href='https://github.com/devhims/whisper-nextjs-sample'
+                  href='https://github.com/lberthod/langchainwhisperjs'
                   color='blue.400'
                   _hover={{ color: 'blue.500' }}
                   isExternal

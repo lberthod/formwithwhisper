@@ -9,7 +9,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Whisper: Speech to Text</title>
+        <title>Whisper: Speech to Texts</title>
         <meta
           name='description'
           content='Sample project showcasing setup of whisper api in a next.js project for speech to text conversion'

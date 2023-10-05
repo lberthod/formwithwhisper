@@ -10,12 +10,13 @@
     "install-legacy-deps": "npm install --legacy-peer-deps"
   },
   "dependencies": {
-    "@chakra-ui/icons": "^2.0.17",
+    "@chakra-ui/icons": "^2.1.1",
     "@chakra-ui/next-js": "^2.1.0",
     "@chakra-ui/react": "^2.5.1",
     "@emotion/react": "^11.10.6",
     "@emotion/styled": "^11.10.6",
     "audiobuffer-to-wav": "^1.0.0",
+    "firebase": "^10.4.0",
     "form-data": "^4.0.0",
     "framer-motion": "^10.2.4",
     "fs-extra": "^11.1.1",
